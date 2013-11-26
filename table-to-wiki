@@ -1,0 +1,284 @@
+#!/usr/bin/perl
+#
+# Take a table formatted as plain text and convert it to Wiki format.  In Wiki
+# format, columns are separated by "||", and rows begin and end with "||".
+#
+# The columns of the input might be separated by tabs or spaces:
+#
+#  - If there are any tabs in the table, we assume all columns are separated
+#    by one tab.  This is the case if you paste from Excel, for example.
+#
+#  - If no tabs, then we try to infer the table column boundaries: any
+#    character column that is a space in every row is assumed to be a table
+#    column boundary.
+#
+
+# This software is distributed under the "Simplified BSD license":
+#
+# Copyright Michael Cook <michael@waxrat.com>. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MICHAEL COOK ''AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MICHAEL COOK OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Michael Cook.
+
+use strict;
+use warnings;
+use Getopt::Long;
+
+my ($THIS) = $0 =~ m%([^/]+)$%;
+my $USAGE = "usage: $THIS [files...]\n";
+
+my $HEADERROW;
+my $ALIGN = "d";
+my $DEBUG;
+
+Getopt::Long::config("bundling");
+GetOptions
+("header-row|h" => \$HEADERROW,
+ # First row is the header.
+
+ "align|a=s" => \$ALIGN,
+ # A string of "clrd" characters, one per table column.
+ #
+ # c - center
+ # l - left align
+ # r - right align
+ # d - default align: numbers are right aligned, all else left.
+ #
+ # If the string is too short (there are more table columns than chars)
+ # then the last char is used repeatedly.
+
+ "debug!" => \$DEBUG,
+ #
+ # Debug mode.
+ #
+)
+or die $USAGE;
+
+my $NUMBER = qr/^[-+]?(\d+\.?\d*|\.\d+)(%|e[+-]?\d+)?$/i;
+
+sub has_tabs {
+    my ($aref) = @_;
+
+    for (@$aref) {
+	return 1
+	    if /\t/;
+    }
+    return 0;
+}
+
+sub longest {
+    my ($aref) = @_;
+
+    my $n = 0;
+    for (@$aref) {
+	$n = length
+	    if $n < length;
+    }
+    return $n;
+}
+
+sub all_spaces {
+    my ($aref, $index) = @_;
+    # See if every character in column $index is a space.
+
+    for (@$aref) {
+	return 0
+	    unless substr($_, $index, 1) eq " ";
+    }
+    return 1;
+}
+
+sub get_align {
+    my ($align, $i) = @_;
+    # Return the alignment character for $_.
+
+    my $a = substr($align, $i, 1);
+    if ($a eq "d") {
+	$a = "l";
+	$a = "r" if /$NUMBER/;
+    }
+    return $a;
+}
+
+push @ARGV, "-"
+    unless @ARGV;
+
+$ALIGN =~ /^[clrd]+$/i
+    or die "invalid --align argument '$ALIGN'";
+$ALIGN = lc $ALIGN;
+
+my $exit = 0;
+my $sep = "";
+for my $arg (@ARGV) {
+    warn "> arg $arg\n" if $DEBUG;
+    my $fh;
+    unless (open $fh, $arg) {
+	warn "open $arg: $!";
+	$exit = 1;
+	next;
+    }
+    my @rows = <$fh>;
+    $fh = undef;
+    s/\s+$//
+	for @rows;
+
+    if (has_tabs \@rows) {
+	warn "> has tabs\n" if $DEBUG;
+	for (@rows) {
+	    $_ = [split /\t/, $_, -1];
+	}
+    } else {
+	warn "> no tabs\n" if $DEBUG;
+	my $longest = longest \@rows;
+	# Make all lines the same length.
+	for (@rows) {
+	    $_ .= " " x ($longest - length);
+	}
+	# Remove leading spaces if in all rows.
+	while ($longest > 0 && all_spaces \@rows, 0) {
+	    for (@rows) {
+		substr($_, 0, 1, "");
+	    }
+	    --$longest;
+	}
+	# Remove trailing spaces if in all rows.
+	while ($longest > 0 && all_spaces \@rows, $longest - 1) {
+	    for (@rows) {
+		substr($_, -1, 1, "");
+	    }
+	    --$longest;
+	}
+	# Find the columns.
+	my @cols;
+	for (my $i = 0; $i < $longest; ++$i) {
+	    if (all_spaces \@rows, $i) {
+		push @cols, $i;
+		# Skip adjacent character columns that are all blank.
+		while ($i + 1 < $longest && all_spaces \@rows, $i + 1) {
+		    ++$i;
+		}
+	    }
+	}
+	push @cols, $longest;
+	# Extract all the cells.
+	for (@rows) {
+	    my @c;
+	    my $prev = 0;
+	    for my $col (@cols) {
+		push @c, substr($_, $prev, $col - $prev);
+		$prev = $col + 1;
+	    }
+	    $_ = \@c;
+	}
+    }
+    # Trim excess whitespace from each cell.
+    for my $row (@rows) {
+	for (@$row) {
+	    s/  +/ /g;
+	    s/^ //;
+	    s/ $//;
+	}
+    }
+    # Calculate how many columns we have: the maximum number of columns over
+    # all rows.
+    my $cols = 0;
+    for my $row (@rows) {
+	$cols = @$row
+	    if $cols < @$row;
+    }
+
+    # If our alignment string is too short, replicate the last char.
+    $ALIGN .= substr($ALIGN, -1) x ($cols - length($ALIGN));
+    warn "> cols=$cols, align='$ALIGN'\n" if $DEBUG;
+
+    # Calculate the width of each column: the widest of all cells in that
+    # column.
+    my @width = (0) x $cols;
+    my $headerrow = $HEADERROW;
+    for my $row (@rows) {
+	my $i = 0;
+	for (@$row) {
+	    my $wid = length;
+	    $wid += 2 # length("==")
+		if $headerrow;
+
+	    my $a = get_align($ALIGN, $i);
+	    if ($a eq "c") {
+		$wid += 4; # need two spaces on each end
+	    } elsif ($a eq "r") {
+		$wid++; # need at least one space on the left
+	    }
+
+	    $width[$i] = $wid
+		if $width[$i] < $wid;
+	    ++$i;
+	}
+	$headerrow = 0;
+    }
+    # Output the results.
+    #
+    # A cell with at least two spaces at both the beginning and end will
+    # be centered by the Wiki table renderer.
+    #
+    # A cell that is touching exactly one || border will be aligned to that
+    # border (left or right aligned).
+    #
+    # Otherwise, the cell gets centered for the header row and left aligned
+    # for other rows.
+    print $sep;
+    $sep = "\f\n";
+    $headerrow = $HEADERROW;
+    for my $row (@rows) {
+	my $i = 0;
+	for (@$row) {
+	    my $wid = $width[$i];
+	    print "||";
+	    if ($headerrow) {
+		print "=";
+		$wid -= 2;
+	    }
+
+	    my $sp = $wid - length;
+	    my $a = get_align($ALIGN, $i);
+	    if ($a eq "c") {
+		my $x = int($sp / 2);
+		my $y = $sp - $x;
+		print " " x $x, $_, " " x $y;
+	    } elsif ($a eq "r") {
+		print " " x $sp, $_;
+	    } else {
+		$a eq "l" or die;
+		print $_, " " x $sp;
+	    }
+
+	    print "="
+		if $headerrow;
+	    ++$i;
+	}
+	print "||\n";
+	$headerrow = 0;
+    }
+}
+exit $exit;
