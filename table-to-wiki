@@ -76,7 +76,7 @@ GetOptions
 )
 or die $USAGE;
 
-my $NUMBER = qr/^[-+]?(\d+\.?\d*|\.\d+)(%|e[+-]?\d+)?$/i;
+my $NUMBER = qr/^[-+]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?%?$/i;
 
 sub has_tabs {
     my ($aref) = @_;
