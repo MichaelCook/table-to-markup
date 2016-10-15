@@ -82,8 +82,8 @@ sub has_tabs {
     my ($aref) = @_;
 
     for (@$aref) {
-	return 1
-	    if /\t/;
+        return 1
+            if /\t/;
     }
     return 0;
 }
@@ -93,8 +93,8 @@ sub longest {
 
     my $n = 0;
     for (@$aref) {
-	$n = length
-	    if $n < length;
+        $n = length
+            if $n < length;
     }
     return $n;
 }
@@ -104,8 +104,8 @@ sub all_spaces {
     # See if every character in column $index is a space.
 
     for (@$aref) {
-	return 0
-	    unless substr($_, $index, 1) eq " ";
+        return 0
+            unless substr($_, $index, 1) eq " ";
     }
     return 1;
 }
@@ -116,8 +116,8 @@ sub get_align {
 
     my $a = substr($align, $i, 1);
     if ($a eq "d") {
-	$a = "l";
-	$a = "r" if /$NUMBER/;
+        $a = "l";
+        $a = "r" if /$NUMBER/;
     }
     return $a;
 }
@@ -135,78 +135,78 @@ for my $arg (@ARGV) {
     warn "> arg $arg\n" if $DEBUG;
     my $fh;
     unless (open $fh, $arg) {
-	warn "open $arg: $!";
-	$exit = 1;
-	next;
+        warn "open $arg: $!";
+        $exit = 1;
+        next;
     }
     my @rows = <$fh>;
     $fh = undef;
     s/\s+$//
-	for @rows;
+        for @rows;
 
     if (has_tabs \@rows) {
-	warn "> has tabs\n" if $DEBUG;
-	for (@rows) {
-	    $_ = [split /\t/, $_, -1];
-	}
+        warn "> has tabs\n" if $DEBUG;
+        for (@rows) {
+            $_ = [split /\t/, $_, -1];
+        }
     } else {
-	warn "> no tabs\n" if $DEBUG;
-	my $longest = longest \@rows;
-	# Make all lines the same length.
-	for (@rows) {
-	    $_ .= " " x ($longest - length);
-	}
-	# Remove leading spaces if in all rows.
-	while ($longest > 0 && all_spaces \@rows, 0) {
-	    for (@rows) {
-		substr($_, 0, 1, "");
-	    }
-	    --$longest;
-	}
-	# Remove trailing spaces if in all rows.
-	while ($longest > 0 && all_spaces \@rows, $longest - 1) {
-	    for (@rows) {
-		substr($_, -1, 1, "");
-	    }
-	    --$longest;
-	}
-	# Find the columns.
-	my @cols;
-	for (my $i = 0; $i < $longest; ++$i) {
-	    if (all_spaces \@rows, $i) {
-		push @cols, $i;
-		# Skip adjacent character columns that are all blank.
-		while ($i + 1 < $longest && all_spaces \@rows, $i + 1) {
-		    ++$i;
-		}
-	    }
-	}
-	push @cols, $longest;
-	# Extract all the cells.
-	for (@rows) {
-	    my @c;
-	    my $prev = 0;
-	    for my $col (@cols) {
-		push @c, substr($_, $prev, $col - $prev);
-		$prev = $col + 1;
-	    }
-	    $_ = \@c;
-	}
+        warn "> no tabs\n" if $DEBUG;
+        my $longest = longest \@rows;
+        # Make all lines the same length.
+        for (@rows) {
+            $_ .= " " x ($longest - length);
+        }
+        # Remove leading spaces if in all rows.
+        while ($longest > 0 && all_spaces \@rows, 0) {
+            for (@rows) {
+                substr($_, 0, 1, "");
+            }
+            --$longest;
+        }
+        # Remove trailing spaces if in all rows.
+        while ($longest > 0 && all_spaces \@rows, $longest - 1) {
+            for (@rows) {
+                substr($_, -1, 1, "");
+            }
+            --$longest;
+        }
+        # Find the columns.
+        my @cols;
+        for (my $i = 0; $i < $longest; ++$i) {
+            if (all_spaces \@rows, $i) {
+                push @cols, $i;
+                # Skip adjacent character columns that are all blank.
+                while ($i + 1 < $longest && all_spaces \@rows, $i + 1) {
+                    ++$i;
+                }
+            }
+        }
+        push @cols, $longest;
+        # Extract all the cells.
+        for (@rows) {
+            my @c;
+            my $prev = 0;
+            for my $col (@cols) {
+                push @c, substr($_, $prev, $col - $prev);
+                $prev = $col + 1;
+            }
+            $_ = \@c;
+        }
     }
     # Trim excess whitespace from each cell.
     for my $row (@rows) {
-	for (@$row) {
-	    s/  +/ /g;
-	    s/^ //;
-	    s/ $//;
-	}
+        for (@$row) {
+            s/  +/ /g;
+            s/^ //;
+            s/ $//;
+        }
     }
     # Calculate how many columns we have: the maximum number of columns over
     # all rows.
     my $cols = 0;
     for my $row (@rows) {
-	$cols = @$row
-	    if $cols < @$row;
+        $cols = @$row
+            if $cols < @$row;
     }
 
     # If our alignment string is too short, replicate the last char.
@@ -218,24 +218,24 @@ for my $arg (@ARGV) {
     my @width = (0) x $cols;
     my $headerrow = $HEADERROW;
     for my $row (@rows) {
-	my $i = 0;
-	for (@$row) {
-	    my $wid = length;
-	    $wid += 2 # length("==")
-		if $headerrow;
+        my $i = 0;
+        for (@$row) {
+            my $wid = length;
+            $wid += 2 # length("==")
+                if $headerrow;
 
-	    my $a = get_align($ALIGN, $i);
-	    if ($a eq "c") {
-		$wid += 4; # need two spaces on each end
-	    } elsif ($a eq "r") {
-		$wid++; # need at least one space on the left
-	    }
+            my $a = get_align($ALIGN, $i);
+            if ($a eq "c") {
+                $wid += 4; # need two spaces on each end
+            } elsif ($a eq "r") {
+                $wid++; # need at least one space on the left
+            }
 
-	    $width[$i] = $wid
-		if $width[$i] < $wid;
-	    ++$i;
-	}
-	$headerrow = 0;
+            $width[$i] = $wid
+                if $width[$i] < $wid;
+            ++$i;
+        }
+        $headerrow = 0;
     }
     # Output the results.
     #
@@ -251,34 +251,34 @@ for my $arg (@ARGV) {
     $sep = "\f\n";
     $headerrow = $HEADERROW;
     for my $row (@rows) {
-	my $i = 0;
-	for (@$row) {
-	    my $wid = $width[$i];
-	    print "||";
-	    if ($headerrow) {
-		print "=";
-		$wid -= 2;
-	    }
+        my $i = 0;
+        for (@$row) {
+            my $wid = $width[$i];
+            print "||";
+            if ($headerrow) {
+                print "=";
+                $wid -= 2;
+            }
 
-	    my $sp = $wid - length;
-	    my $a = get_align($ALIGN, $i);
-	    if ($a eq "c") {
-		my $x = int($sp / 2);
-		my $y = $sp - $x;
-		print " " x $x, $_, " " x $y;
-	    } elsif ($a eq "r") {
-		print " " x $sp, $_;
-	    } else {
-		$a eq "l" or die;
-		print $_, " " x $sp;
-	    }
+            my $sp = $wid - length;
+            my $a = get_align($ALIGN, $i);
+            if ($a eq "c") {
+                my $x = int($sp / 2);
+                my $y = $sp - $x;
+                print " " x $x, $_, " " x $y;
+            } elsif ($a eq "r") {
+                print " " x $sp, $_;
+            } else {
+                $a eq "l" or die;
+                print $_, " " x $sp;
+            }
 
-	    print "="
-		if $headerrow;
-	    ++$i;
-	}
-	print "||\n";
-	$headerrow = 0;
+            print "="
+                if $headerrow;
+            ++$i;
+        }
+        print "||\n";
+        $headerrow = 0;
     }
 }
 exit $exit;
