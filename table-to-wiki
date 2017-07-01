@@ -65,13 +65,10 @@ GetOptions
  # If the string is too short (there are more table columns than chars)
  # then the last char is used repeatedly.
 
- "debug!" => \$DEBUG,
- #
- # Debug mode.
- #
-)
+ "debug!" => \$DEBUG)
 or die $USAGE;
 
+# Any field that looks like a number will be right justified.
 my $NUMBER = qr/^[-+]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?%?$/i;
 
 sub has_tabs {
@@ -137,6 +134,8 @@ for my $arg (@ARGV) {
     }
     my @rows = <$fh>;
     $fh = undef;
+
+    # Remove trailing newlines, spaces, tabs and carriage returns.
     s/\s+$//
         for @rows;
 
