@@ -47,6 +47,7 @@ my $USAGE = "usage: $THIS [files...]\n";
 
 my $HEADERROW;
 my $ALIGN = "d";
+my $SEPARATOR = "||";
 my $DEBUG;
 
 Getopt::Long::config("bundling");
@@ -64,6 +65,9 @@ GetOptions
  #
  # If the string is too short (there are more table columns than chars)
  # then the last char is used repeatedly.
+
+ "separator|s=s" => \$SEPARATOR,
+ "t" => sub { $SEPARATOR = "\t" },
 
  "debug!" => \$DEBUG)
 or die $USAGE;
@@ -249,7 +253,7 @@ for my $arg (@ARGV) {
         my $i = 0;
         for (@$row) {
             my $wid = $width[$i];
-            print "||";
+            print $SEPARATOR;
             if ($headerrow) {
                 print "=";
                 $wid -= 2;
@@ -272,7 +276,7 @@ for my $arg (@ARGV) {
                 if $headerrow;
             ++$i;
         }
-        print "||\n";
+        print "$SEPARATOR\n";
         $headerrow = 0;
     }
 }
