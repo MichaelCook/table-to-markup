@@ -27,28 +27,32 @@ end with "||".  Spacing in each cell determines alignment:
 
 Example Wiki table:
 
+```
   ||=Tables     =||=      Are      =||= Cool=||
   ||col 3 is     ||  right-aligned  ||  $1600||
   ||col 2 is     ||    centered     ||    $12||
   ||zebra stripes||    are neat     ||     $1||
+```
 
 In Markdown format, columns are separated by "|", and rows begin and end with
 "|".  The second line determines how text in each column will be aligned;
 colons indicate alignment:
 
-  * center :---:
+  * center `:---:`
 
-  * right ---:
+  * right `---:`
 
-  * left ---
+  * left `---`
 
 Example Markdown table:
 
+```
   | Tables        | Are           | Cool  |
   | ------------- |:-------------:| -----:|
   | col 3 is      | right-aligned | $1600 |
   | col 2 is      | centered      |   $12 |
   | zebra stripes | are neat      |    $1 |
+```
 
 The script recognizes numbers and right-justifies them by default.
 
@@ -69,5 +73,7 @@ Options:
   then the last char is used repeatedly.
 
   --wiki (-w)          Output Wiki format (default).
+
   --markdown (-m)      Output Markdown format.
+
   --tab (-t)           Output tab-separated columns.
