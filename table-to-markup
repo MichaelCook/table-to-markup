@@ -49,8 +49,6 @@
 #  | col 2 is      | centered      |   $12 |
 #  | zebra stripes | are neat      |    $1 |
 #
-# The script recognizes numbers and right-justifies them by default.
-#
 # Options:
 #
 #   --header-row (-h)    The first row is the table header.
@@ -139,6 +137,7 @@ my $NUMBER = qr/^[-+]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?%?$/i;
 
 sub has_tabs {
     my ($aref) = @_;
+    # True if any line in @$aref contains a tab.
 
     for (@$aref) {
         return 1
@@ -149,6 +148,7 @@ sub has_tabs {
 
 sub longest {
     my ($aref) = @_;
+    # Return the length of the longest line in @$aref.
 
     my $n = 0;
     for (@$aref) {
@@ -159,24 +159,24 @@ sub longest {
 }
 
 sub all_spaces {
-    my ($aref, $index) = @_;
-    # See if every character in column $index is a space.
+    my ($aref, $col) = @_;
+    # True if every character in column $col is a space.
 
     for (@$aref) {
         return 0
-            unless substr($_, $index, 1) eq " ";
+            unless substr($_, $col, 1) eq " ";
     }
     return 1;
 }
 
 sub get_align {
-    my ($align, $i) = @_;
-    # Return the alignment character for $_.
+    my ($col, $text) = @_;
+    # Return the alignment character for $text in column $col.
 
-    my $a = substr($align, $i, 1);
+    my $a = substr $ALIGN, $col, 1;
     if ($a eq "d") {
         $a = "l";
-        $a = "r" if /$NUMBER/;
+        $a = "r" if $text =~ /$NUMBER/;
     }
     return $a;
 }
@@ -197,11 +197,11 @@ sub output_wiki {
             $wid += 2 # length("==")
                 if $headerrow;
 
-            my $a = get_align($ALIGN, $i);
+            my $a = get_align($i, $_);
             if ($a eq "c") {
-                $wid += 4; # need two spaces on each end
+                $wid += 4;      # two spaces on each end
             } elsif ($a eq "r") {
-                $wid++; # need at least one space on the left
+                $wid++;         # a space on the left
             }
 
             $width[$i] = $wid
@@ -223,7 +223,7 @@ sub output_wiki {
             }
 
             my $sp = $wid - length;
-            my $a = get_align($ALIGN, $i);
+            my $a = get_align($i, $_);
             if ($a eq "c") {
                 my $x = int($sp / 2);
                 my $y = $sp - $x;
@@ -277,7 +277,7 @@ sub output_markdown {
             my $wid = $width[$i];
 
             my $sp = $wid - length;
-            my $a = get_align($ALIGN, $i);
+            my $a = get_align($i, $_);
             if ($a eq "c") {
                 my $x = int($sp / 2);
                 my $y = $sp - $x;
@@ -297,7 +297,7 @@ sub output_markdown {
             $headerrow = 0;
             for (my $i = 0; $i < $num_cols; ++$i) {
                 my $wid = $width[$i];
-                my $a = get_align($ALIGN, $i);
+                my $a = get_align($i, $_);
                 if ($a eq "c") {
                     print "|:", "-" x $wid, ":";
                 } elsif ($a eq "r") {
@@ -320,7 +320,7 @@ sub output_tab {
     }
 }
 
-$OUTPUT = eval "\\&output_$OUTPUT";
+$OUTPUT = eval "\\&output_$OUTPUT" // die;
 
 # ----------------------------------------------------------------------------
 
