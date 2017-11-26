@@ -367,13 +367,6 @@ for my $arg (@ARGV) {
             }
             --$longest;
         }
-        # Remove trailing spaces if in all rows.
-        while ($longest > 0 && all_spaces \@rows, $longest - 1) {
-            for (@rows) {
-                substr($_, -1, 1, "");
-            }
-            --$longest;
-        }
         # Find the columns.
         my @cols;
         for (my $i = 0; $i < $longest; ++$i) {
