@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/python3
 #
 # Take a table formatted as plain text and convert it to Wiki or Markdown
 # format.
@@ -96,325 +96,290 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use strict;
-use warnings;
-use Getopt::Long;
+import sys
+import os
+import argparse
+import re
 
-my ($THIS) = $0 =~ m%([^/]+)$%;
-my $USAGE = "usage: $THIS [files...]\n";
+# ----------------------------------------------------------------------------
 
-my $HEADERROW;
-my $ALIGN = "d";
-my $OUTPUT = "wiki";            # wiki, markdown, tab
-my $DEBUG;
+parser = argparse.ArgumentParser(description="""\
+Take a table formatted as plain text and convert it to
+Wiki or Markdown format.
+""")
+parser.add_argument("--header-row", "-H",
+                    action="store_true",
+                    help="First input row is the header")
+parser.add_argument("--align", "-a",
+                    default="d",
+                    help="""
+A string of "clrd" characters, one per table column
+center, left, right and default align.
+For default align, numbers are right aligned, all else left.
 
-Getopt::Long::config("bundling");
-GetOptions
-("header-row|h" => \$HEADERROW,
- # First input row is the header.
+If there are more table columns than align chars,
+then the last char is used repeatedly.
+""")
+parser.add_argument("--wiki", "-w",
+                    action="store_true")
+parser.add_argument("--markdown", "-m",
+                    action="store_true")
+parser.add_argument("--tab", "-t",
+                    action="store_true")
+parser.add_argument("--debug",
+                    help="Enable debug logging",
+                    action="store_true")
+parser.add_argument("files", nargs="*")
+args = parser.parse_args()
+del parser
 
- "align|a=s" => \$ALIGN,
- # A string of "clrd" characters, one per table column.
- #
- # c - center
- # l - left align
- # r - right align
- # d - default align: numbers are right aligned, all else left.
- #
- # If the string is too short (there are more table columns than chars)
- # then the last char is used repeatedly.
+debug = None
+if args.debug:
+    def debug(*args):
+        print(">", " ".join(map(lambda a: str(a), args)))
 
- "wiki|w" => sub { $OUTPUT = "wiki" },
- "markdown|m" => sub { $OUTPUT = "markdown" },
- "tab|t" => sub { $OUTPUT = "tab" },
+if args.wiki + args.markdown + args.tab == 0:
+    args.markdown = True
 
- "debug!" => \$DEBUG)
-or die $USAGE;
+align = args.align.lower()
+if not re.match(r'^[clrd]+$', align):
+    raise Exception("invalid --align argument '{}'".format(align));
+
+# ----------------------------------------------------------------------------
 
 # For default alignment "d", any field that looks like a number
 # will be right justified.
-my $NUMBER = qr/^[-+]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?%?$/i;
+number_re = re.compile(r'^[-+]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?%?$')
 
-sub has_tabs {
-    my ($aref) = @_;
-    # True if any line in @$aref contains a tab.
+def has_tabs(lines):
+    "True if any line contains a tab."
 
-    for (@$aref) {
-        return 1
-            if /\t/;
-    }
-    return 0;
-}
+    for line in lines:
+        if "\t" in line:
+            return True
+    return False
 
-sub longest {
-    my ($aref) = @_;
-    # Return the length of the longest line in @$aref.
+def all_spaces(lines, col):
+    "True if every character in column COL is a space."
 
-    my $n = 0;
-    for (@$aref) {
-        $n = length
-            if $n < length;
-    }
-    return $n;
-}
+    for line in lines:
+        if line[col] != " ":
+            return False
+    return True
 
-sub all_spaces {
-    my ($aref, $col) = @_;
-    # True if every character in column $col is a space.
+def get_align(col, text):
+    "Return the alignment character for TEXT in column COL."
 
-    for (@$aref) {
-        return 0
-            unless substr($_, $col, 1) eq " ";
-    }
-    return 1;
-}
+    if col < len(align):
+        a = align[col]
+    else:
+        a = "d"
+    if a == "d":
+        a = "l"
+        if number_re.match(text):
+            a = "r"
+    return a
 
-sub get_align {
-    my ($col, $text) = @_;
-    # Return the alignment character for $text in column $col.
-
-    my $a = substr $ALIGN, $col, 1;
-    if ($a eq "d") {
-        $a = "l";
-        $a = "r" if $text =~ /$NUMBER/;
-    }
-    return $a;
-}
+def trim(values):
+    """Remove leading and trailing whitespace for each string in VALUES.
+       Compress consecutive whitespace to a single space."""
+    return [re.sub(r'\s+', " ", value).strip()
+            for value in values]
 
 # ----------------------------------------------------------------------------
 
-sub output_wiki {
-    my ($num_cols, $rows) = @_;
-
+def output_wiki(num_cols, rows):
     # Calculate the width of each column: the widest of all cells in that
     # column.  Alignment can affect the width of each column.
-    my @width = (0) x $num_cols;
-    my $headerrow = $HEADERROW;
-    for my $row (@$rows) {
-        my $i = 0;
-        for (@$row) {
-            my $wid = length;
-            $wid += 2 # length("==")
-                if $headerrow;
+    width = [0] * num_cols
+    header_row = args.header_row
+    for row in rows:
+        i = 0
+        for cell in row:
+            wid = len(cell)
+            if header_row:
+                wid += 2 # length("==")
 
-            my $a = get_align($i, $_);
-            if ($a eq "c") {
-                $wid += 4;      # two spaces on each end
-            } elsif ($a eq "r") {
-                $wid++;         # a space on the left
-            }
+            a = get_align(i, cell)
+            if a == "c":
+                wid += 4       # two spaces on each end
+            elif a == "r":
+                wid += 1       # a space on the left
 
-            $width[$i] = $wid
-                if $width[$i] < $wid;
-            ++$i;
-        }
-        $headerrow = 0;
-    }
+            if width[i] < wid:
+                width[i] = wid
+            i += 1
+        header_row = False
+    if debug: debug("width", width)
 
-    $headerrow = $HEADERROW;
-    for my $row (@$rows) {
-        my $i = 0;
-        for (@$row) {
-            my $wid = $width[$i];
-            print "||";
-            if ($headerrow) {
-                print "=";
-                $wid -= 2;
-            }
+    header_row = args.header_row
+    for row in rows:
+        if debug: debug("row", row)
+        i = 0
+        line = ""
+        for cell in row:
+            wid = width[i]
+            line += "||"
+            if header_row:
+                line += "="
+                wid -= 2
 
-            my $sp = $wid - length;
-            my $a = get_align($i, $_);
-            if ($a eq "c") {
-                my $x = int($sp / 2);
-                my $y = $sp - $x;
-                print " " x $x, $_, " " x $y;
-            } elsif ($a eq "r") {
-                print " " x $sp, $_;
-            } else {
-                $a eq "l" or die;
-                print $_, " " x $sp;
-            }
+            sp = wid - len(cell)
+            a = get_align(i, cell)
+            if a == "c":
+                x = sp // 2
+                y = sp - x
+                line += " " * x + cell + " " * y
+            elif a == "r":
+                line += " " * sp + cell
+            else:
+                assert a == "l"
+                line += cell + " " * sp
 
-            print "="
-                if $headerrow;
-            ++$i;
-        }
-        print "||\n";
-        $headerrow = 0;
-    }
-}
+            if header_row:
+                line += "="
 
-sub output_markdown {
-    my ($num_cols, $rows) = @_;
+            i += 1
+        line += "||"
+        print(line)
+        header_row = False
 
-    unless ($HEADERROW) {
+def output_markdown(num_cols, rows):
+    if not args.header_row:
         # Fake header.
-        my @header;
-        for (my $i = 0; $i < $num_cols; ++$i) {
-            push @header, sprintf "C%d", $i + 1;
-        }
-        unshift @$rows, \@header;
-    }
+        rows.insert(0, ["C%d" % (i + 1) for i in range(num_cols)])
 
     # Calculate the width of each column: the widest of all cells
     # in that column.
-    my @width = (0) x $num_cols;
-    for my $row (@$rows) {
-        my $i = 0;
-        for (@$row) {
-            my $wid = length;
-            $width[$i] = $wid
-                if $width[$i] < $wid;
-            ++$i;
-        }
-    }
+    width = [0] * num_cols
+    for row in rows:
+        i = 0
+        for cell in row:
+            wid = len(cell)
+            if width[i] < wid:
+                width[i] = wid
+            i += 1
 
-    my $headerrow = 1;
-    for my $row (@$rows) {
-        my $i = 0;
-        for (@$row) {
-            print "| ";
-            my $wid = $width[$i];
+    header_row = True
+    for row in rows:
+        i = 0
+        line = ""
+        for cell in row:
+            line += "| "
+            wid = width[i]
 
-            my $sp = $wid - length;
-            my $a = get_align($i, $_);
-            if ($a eq "c") {
-                my $x = int($sp / 2);
-                my $y = $sp - $x;
-                print " " x $x, $_, " " x $y;
-            } elsif ($a eq "r") {
-                print " " x $sp, $_;
-            } else {
-                $a eq "l" or die;
-                print $_, " " x $sp;
-            }
-            print " ";
-            ++$i;
-        }
-        print "|\n";
+            sp = wid - len(cell)
+            a = get_align(i, cell)
+            if a == "c":
+                x = sp // 2
+                y = sp - x
+                line += " " * x + cell + " " * y
+            elif a == "r":
+                line += " " * sp + cell
+            else:
+                assert a == "l"
+                line += cell + " " * sp
+            line += " "
+            i += 1
+        line += "|"
+        print(line)
 
-        if ($headerrow) {
-            $headerrow = 0;
-            for (my $i = 0; $i < $num_cols; ++$i) {
-                my $wid = $width[$i];
-                my $a = get_align($i, $_);
-                if ($a eq "c") {
-                    print "|:", "-" x $wid, ":";
-                } elsif ($a eq "r") {
-                    print "| ", "-" x $wid, ":";
-                } else {
-                    $a eq "l" or die;
-                    print "| ", "-" x $wid, " ";
-                }
-            }
-            print "|\n"
-        }
-    }
-}
+        if header_row:
+            header_row = False
+            line = ""
+            for i in range(num_cols):
+                wid = width[i]
+                a = get_align(i, "")
+                if a == "c":
+                    line += "|:" + "-" * wid + ":"
+                elif a == "r":
+                    line += "| " + "-" * wid + ":"
+                else:
+                    assert a == "l"
+                    line += "| " + "-" * wid + " "
+            line += "|"
+            print(line)
 
-sub output_tab {
-    my ($num_cols, $rows) = @_;
-
-    for my $row (@$rows) {
-        print join("\t", @$row), "\n";
-    }
-}
-
-$OUTPUT = eval "\\&output_$OUTPUT" // die;
+def output_tab(num_cols, rows):
+    for row in rows:
+        print("\t".join(row))
 
 # ----------------------------------------------------------------------------
 
-$ALIGN =~ /^[clrd]+$/i
-    or die "invalid --align argument '$ALIGN'";
-$ALIGN = lc $ALIGN;
-
-push @ARGV, "-"
-    unless @ARGV;
-
-my $exit = 0;
-my $table_separator = "";
-for my $arg (@ARGV) {
-    warn "> arg $arg\n" if $DEBUG;
-    my $fh;
-    unless (open $fh, $arg) {
-        warn "open $arg: $!";
-        $exit = 1;
-        next;
-    }
-    my @rows = <$fh>;
-    $fh = undef;
-
+def process_lines(lines):
     # Remove trailing newlines, spaces, tabs and carriage returns.
-    s/\s+$//
-        for @rows;
+    lines = [line.rstrip() for line in lines]
 
-    if (has_tabs \@rows) {
-        warn "> has tabs\n" if $DEBUG;
-        for (@rows) {
-            $_ = [split /\t/, $_, -1];
-        }
-    } else {
-        warn "> no tabs\n" if $DEBUG;
-        my $longest = longest \@rows;
+    if has_tabs(lines):
+        rows = [trim(line.split("\t"))
+                for line in lines]
+    else:
+        longest = max(map(len, lines))
+
         # Make all lines the same length.
-        for (@rows) {
-            $_ .= " " x ($longest - length);
-        }
-        # Remove leading spaces if in all rows.
-        while ($longest > 0 && all_spaces \@rows, 0) {
-            for (@rows) {
-                substr($_, 0, 1, "");
-            }
-            --$longest;
-        }
-        # Find the columns.
-        my @cols;
-        for (my $i = 0; $i < $longest; ++$i) {
-            if (all_spaces \@rows, $i) {
-                push @cols, $i;
-                # Skip adjacent character columns that are all blank.
-                while ($i + 1 < $longest && all_spaces \@rows, $i + 1) {
-                    ++$i;
-                }
-            }
-        }
-        push @cols, $longest;
-        # Extract all the cells.
-        for (@rows) {
-            my @c;
-            my $prev = 0;
-            for my $col (@cols) {
-                push @c, substr($_, $prev, $col - $prev);
-                $prev = $col + 1;
-            }
-            $_ = \@c;
-        }
-    }
+        lines = [line + " " * (longest - len(line))
+                 for line in lines]
 
-    # Trim excess whitespace from each cell.
-    for my $row (@rows) {
-        for (@$row) {
-            s/  +/ /g;
-            s/^ //;
-            s/ $//;
-        }
-    }
+        # Remove leading spaces if in all rows.
+        while longest > 0 and all_spaces(lines, 0):
+            lines = [line[1:] for line in lines]
+            longest -= 1
+        if debug:
+            for line in lines:
+                debug("line", line)
+
+        # Find the columns.
+        cols = list()
+        i = 0
+        while i < longest:
+            if all_spaces(lines, i):
+                cols.append(i)
+                # Skip adjacent character columns that are all blank.
+                while i + 1 < longest and all_spaces(lines, i + 1):
+                    i += 1
+            i += 1
+        cols.append(longest)
+        if debug: debug("cols", cols)
+
+        # Extract all the cells.
+        rows = list()
+        for line in lines:
+            cells = list()
+            prev_col = 0
+            for col in cols:
+                cells.append(line[prev_col:col])
+                prev_col = col + 1
+            rows.append(trim(cells))
+
+    if debug:
+        debug("rows", len(rows))
+        for row in rows:
+            debug("row", row)
 
     # Calculate how many columns we have: the maximum number of columns over
     # all rows.
-    my $num_cols = 0;
-    for my $row (@rows) {
-        $num_cols = @$row
-            if $num_cols < @$row;
-    }
+    num_cols = 0
+    for row in rows:
+        if num_cols < len(row):
+            num_cols = len(row)
+    if debug: debug("num_cols", num_cols)
 
-    # If our alignment string is too short, replicate the last char.
-    $ALIGN .= substr($ALIGN, -1) x ($num_cols - length($ALIGN));
-    warn "> num_cols=$num_cols, align='$ALIGN'\n" if $DEBUG;
+    if args.wiki:
+        output_wiki(num_cols, rows)
 
-    # Output the results.
-    print $table_separator;
-    $table_separator = "\f\n";
-    $OUTPUT->($num_cols, \@rows);
-}
-exit $exit;
+    if args.markdown:
+        output_markdown(num_cols, rows)
+
+    if args.tab:
+        output_tab(num_cols, rows)
+
+if args.files:
+    want_separator = False
+    for filename in args.files:
+        with open(filename) as fh:
+            if want_separator:
+                print("\f")
+            process_lines(fh.readlines())
+            want_separator = True
+else:
+    process_lines(sys.stdin.readlines())
