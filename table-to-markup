@@ -7,22 +7,22 @@
 #
 #  * If the input has no tab characters, then we infer the table column
 #    boundaries: any character column that is a space in every row is assumed
-#    to be a table column boundary.
+#    to be a table column boundary
 #
 #  * If there are tabs, we assume all columns are separated by one tab.  This
-#    is the case if you paste from Excel, for example.
+#    is the case if you paste from Excel, for example
 #
 # In Wiki format, columns are separated by "||", and rows begin and
 # end with "||".  Spacing in each cell determines alignment:
 #
 # * A cell with at least two spaces at both the beginning and end will be
-#   centered by the Wiki table renderer.
+#   centered by the Wiki table renderer
 #
 # * A cell that is touching exactly one || border will be aligned to that
-#   border (left or right aligned).
+#   border (left or right aligned)
 #
 # * Otherwise, the cell gets centered for the header row and left aligned for
-#   other rows.
+#   other rows
 #
 # Example Wiki table:
 #
@@ -32,8 +32,8 @@
 #  ||zebra stripes||    are neat     ||     $1||
 #
 # In Markdown format, columns are separated by "|", and rows begin and end
-# with "|".  The second line determines how text in each column will be aligned;
-# colons indicate alignment:
+# with "|".  The second line determines how text in each column will be
+# aligned; colons indicate alignment:
 #
 # * center :---:
 #
@@ -51,10 +51,10 @@
 #
 # Options:
 #
-#   --header-row (-h)    The first row is the table header.
+#   --header-row (-h)    The first row is the table header
 #
 #   --header TEXT        Use TEXT as the table header (as if it were the first
-#                        row in the input).
+#                        row in the input)
 #
 #   --align (-a) SPEC
 #
@@ -63,14 +63,14 @@
 #   * c - center
 #   * l - left align
 #   * r - right align
-#   * d - default align: numbers are right aligned, all else left.
+#   * d - default align: numbers are right aligned, all else left
 #
 #   If the SPEC string is too short (there are more table columns than chars)
 #   then the last char is used repeatedly.
 #
-#   --wiki (-w)          Output Wiki format (default).
-#   --markdown (-m)      Output Markdown format.
-#   --tab (-t)           Output tab-separated columns.
+#   --wiki (-w)          Output Wiki format (default)
+#   --markdown (-m)      Output Markdown format
+#   --tab (-t)           Output tab-separated columns
 #
 #
 
@@ -108,7 +108,7 @@ import re
 
 parser = argparse.ArgumentParser(description="""
 Take a table formatted as plain text and convert it to
-Wiki or Markdown format.
+Wiki or Markdown format
 """)
 parser.add_argument('--header-row', '-H',
                     action='store_true',
@@ -118,7 +118,7 @@ parser.add_argument('--header',
 parser.add_argument('--no-header-line', '-N',
                     action='store_true',
                     help="""
-Suppress the line of dashes after the output header line (markdown).
+Suppress the line of dashes after the output header line (markdown)
 """)
 parser.add_argument('--align', '-a',
                     default='d',
@@ -128,7 +128,7 @@ center, left, right and default align.
 For default align, numbers are right aligned, all else left.
 
 If there are more table columns than align chars,
-then the last char is used repeatedly.
+then the last char is used repeatedly
 """)
 parser.add_argument('--wiki', '-w',
                     action='store_true')
@@ -150,7 +150,7 @@ if not re.match(r'^[clrd]+$', align):
 # ----------------------------------------------------------------------------
 
 # For default alignment 'd', any field that looks like a number
-# will be right justified.
+# will be right justified
 number_re = re.compile(r'^[-+]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?%?$')
 
 def has_tabs(lines):
@@ -183,8 +183,10 @@ def get_align(col, text):
     return a
 
 def trim(values):
-    """Remove leading and trailing whitespace for each string in VALUES.
-       Compress consecutive whitespace to a single space."""
+    """
+    Remove leading and trailing whitespace for each string in VALUES.
+    Compress consecutive whitespace to a single space
+    """
     return [re.sub(r'\s+', ' ', value).strip()
             for value in values]
 
@@ -192,7 +194,7 @@ def trim(values):
 
 def output_wiki(num_cols, rows):
     # Calculate the width of each column: the widest of all cells in that
-    # column.  Alignment can affect the width of each column.
+    # column.  Alignment can affect the width of each column
     width = [0] * num_cols
     header_row = opts.header_row
     for row in rows:
@@ -246,11 +248,11 @@ def output_wiki(num_cols, rows):
 
 def output_markdown(num_cols, rows):
     if not opts.header_row:
-        # Fake header.
+        # Fake header
         rows.insert(0, ['C%d' % (i + 1) for i in range(num_cols)])
 
     # Calculate the width of each column: the widest of all cells
-    # in that column.
+    # in that column
     width = [0] * num_cols
     for row in rows:
         i = 0
@@ -314,7 +316,7 @@ def process_lines(lines):
         opts.header_row = True
         lines.insert(0, opts.header)
 
-    # Remove trailing newlines, spaces, tabs and carriage returns.
+    # Remove trailing newlines, spaces, tabs and carriage returns
     lines = [line.rstrip() for line in lines]
 
     if has_tabs(lines):
@@ -323,28 +325,28 @@ def process_lines(lines):
     else:
         longest = max(map(len, lines))
 
-        # Make all lines the same length.
+        # Make all lines the same length
         lines = [line + ' ' * (longest - len(line))
                  for line in lines]
 
-        # Remove leading spaces if in all rows.
+        # Remove leading spaces if in all rows
         while longest > 0 and all_spaces(lines, 0):
             lines = [line[1:] for line in lines]
             longest -= 1
 
-        # Find the columns.
+        # Find the columns
         cols = list()
         i = 0
         while i < longest:
             if all_spaces(lines, i):
                 cols.append(i)
-                # Skip adjacent character columns that are all blank.
+                # Skip adjacent character columns that are all blank
                 while i + 1 < longest and all_spaces(lines, i + 1):
                     i += 1
             i += 1
         cols.append(longest)
 
-        # Extract all the cells.
+        # Extract all the cells
         rows = list()
         for line in lines:
             cells = list()
@@ -354,12 +356,9 @@ def process_lines(lines):
                 prev_col = col + 1
             rows.append(trim(cells))
 
-    # Calculate how many columns we have: the maximum number of columns over
-    # all rows.
-    num_cols = 0
-    for row in rows:
-        if num_cols < len(row):
-            num_cols = len(row)
+    # Calculate how many columns we have: the maximum
+    # number of columns over all rows
+    num_cols = max(map(lambda row: len(row), rows))
 
     if opts.wiki:
         output_wiki(num_cols, rows)
