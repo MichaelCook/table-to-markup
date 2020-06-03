@@ -358,7 +358,7 @@ def process_lines(lines):
 
     # Calculate how many columns we have: the maximum
     # number of columns over all rows
-    num_cols = max(map(lambda row: len(row), rows))
+    num_cols = max([len(row) for row in rows])
 
     if opts.wiki:
         output_wiki(num_cols, rows)
