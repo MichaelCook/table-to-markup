@@ -102,6 +102,7 @@
 import sys
 import argparse
 import re
+from typing import Iterable, List
 
 # ----------------------------------------------------------------------------
 
@@ -152,7 +153,7 @@ if not re.match(r'^[clrd]+$', align):
 # will be right justified
 number_re = re.compile(r'^[-+]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?%?$')
 
-def has_tabs(lines):
+def has_tabs(lines: Iterable[str]) -> bool:
     """True if any line contains a tab"""
 
     for line in lines:
@@ -160,7 +161,7 @@ def has_tabs(lines):
             return True
     return False
 
-def all_spaces(lines, col):
+def all_spaces(lines: Iterable[str], col: int) -> bool:
     """True if every character in column COL is a space"""
 
     for line in lines:
@@ -168,7 +169,7 @@ def all_spaces(lines, col):
             return False
     return True
 
-def get_align(col, text):
+def get_align(col: int, text: str) -> str:
     """Return the alignment character for TEXT in column COL"""
 
     if col < len(align):
@@ -181,7 +182,7 @@ def get_align(col, text):
             a = 'r'
     return a
 
-def trim(values):
+def trim(values: Iterable[str]) -> List[str]:
     """
     Remove leading and trailing whitespace for each string in VALUES.
     Compress consecutive whitespace to a single space
@@ -191,7 +192,7 @@ def trim(values):
 
 # ----------------------------------------------------------------------------
 
-def output_wiki(num_cols, rows):
+def output_wiki(num_cols: int, rows: Iterable[Iterable[str]]) -> None:
     # Calculate the width of each column: the widest of all cells in that
     # column.  Alignment can affect the width of each column
     width = [0] * num_cols
@@ -245,9 +246,10 @@ def output_wiki(num_cols, rows):
         print(line)
         header_row = False
 
-def output_markdown(num_cols, rows):
+def output_markdown(num_cols: int, rows: Iterable[Iterable[str]]) -> None:
     if not OPTS.header_row:
         # Fake header
+        rows = list(rows)
         rows.insert(0, ['C%d' % (i + 1) for i in range(num_cols)])
 
     # Calculate the width of each column: the widest of all cells
@@ -301,18 +303,19 @@ def output_markdown(num_cols, rows):
             line += '|'
             print(line)
 
-def output_tab(_num_cols, rows):
+def output_tab(_num_cols: int, rows: Iterable[Iterable[str]]) -> None:
     for row in rows:
         print('\t'.join(row))
 
 # ----------------------------------------------------------------------------
 
-def process_lines(lines):
+def process_lines(lines: Iterable[str]) -> None:
     if not lines:
         return
 
     if OPTS.header is not None:
         OPTS.header_row = True
+        lines = list(lines)
         lines.insert(0, OPTS.header)
 
     # Remove trailing newlines, spaces, tabs and carriage returns
@@ -368,13 +371,16 @@ def process_lines(lines):
     if OPTS.tab:
         output_tab(num_cols, rows)
 
-if OPTS.files:
-    want_separator = False
-    for filename in OPTS.files:
-        with open(filename) as fh:
-            if want_separator:
-                print('\f')
-            process_lines(fh.readlines())
-            want_separator = True
-else:
-    process_lines(sys.stdin.readlines())
+def main() -> None:
+    if OPTS.files:
+        want_separator = False
+        for filename in OPTS.files:
+            with open(filename) as fh:
+                if want_separator:
+                    print('\f')
+                process_lines(fh.readlines())
+                want_separator = True
+    else:
+        process_lines(sys.stdin.readlines())
+
+main()
