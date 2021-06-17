@@ -102,7 +102,7 @@
 import sys
 import argparse
 import re
-from typing import Iterable, List
+from typing import Iterable, List, Final
 
 # ----------------------------------------------------------------------------
 
@@ -137,21 +137,21 @@ parser.add_argument('--markdown', '-m',
 parser.add_argument('--tab', '-t',
                     action='store_true')
 parser.add_argument('files', nargs='*')
-OPTS = parser.parse_args()
+OPTS: Final = parser.parse_args()
 del parser
 
 if OPTS.wiki + OPTS.markdown + OPTS.tab == 0:
     OPTS.markdown = True
 
-align = OPTS.align.lower()
-if not re.match(r'^[clrd]+$', align):
+ALIGN: Final = OPTS.align.lower()
+if not re.match(r'^[clrd]+$', ALIGN):
     raise Exception('invalid --align argument "{}"'.format(OPTS.align))
 
 # ----------------------------------------------------------------------------
 
 # For default alignment 'd', any field that looks like a number
 # will be right justified
-number_re = re.compile(r'^[-+]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?%?$')
+NUMBER_RE: Final = re.compile(r'^[-+]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?%?$')
 
 def has_tabs(lines: Iterable[str]) -> bool:
     """True if any line contains a tab"""
@@ -172,13 +172,13 @@ def all_spaces(lines: Iterable[str], col: int) -> bool:
 def get_align(col: int, text: str) -> str:
     """Return the alignment character for TEXT in column COL"""
 
-    if col < len(align):
-        a = align[col]
+    if col < len(ALIGN):
+        a = ALIGN[col]
     else:
         a = 'd'
     if a == 'd':
         a = 'l'
-        if number_re.match(text):
+        if NUMBER_RE.match(text):
             a = 'r'
     return a
 
