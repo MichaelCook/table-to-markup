@@ -143,7 +143,7 @@ del parser
 if OPTS.wiki + OPTS.markdown + OPTS.tab == 0:
     OPTS.markdown = True
 
-ALIGN: Final = OPTS.align.lower()
+ALIGN: Final[str] = OPTS.align.lower()
 if not re.match(r'^[clrd]+$', ALIGN):
     raise Exception('invalid --align argument "{}"'.format(OPTS.align))
 
