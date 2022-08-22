@@ -100,54 +100,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
-import argparse
 import re
-from typing import Iterable, List, Final
-
-# ----------------------------------------------------------------------------
-
-parser = argparse.ArgumentParser(description="""
-Take a table formatted as plain text and convert it to
-Wiki or Markdown format
-""")
-parser.add_argument('--header-row', '-H',
-                    action='store_true',
-                    help='First input row is the header')
-parser.add_argument('--header',
-                    help='Use this text as the header')
-parser.add_argument('--no-header-line', '-N',
-                    action='store_true',
-                    help="""
-Suppress the line of dashes after the output header line (markdown)
-""")
-parser.add_argument('--align', '-a',
-                    default='d',
-                    help="""
-A string of 'clrd' characters, one per table column
-center, left, right and default align.
-For default align, numbers are right aligned, all else left.
-
-If there are more table columns than align chars,
-then the last char is used repeatedly
-""")
-parser.add_argument('--wiki', '-w',
-                    action='store_true')
-parser.add_argument('--markdown', '-m',
-                    action='store_true')
-parser.add_argument('--tab', '-t',
-                    action='store_true')
-parser.add_argument('files', nargs='*')
-OPTS: Final = parser.parse_args()
-del parser
-
-if OPTS.wiki + OPTS.markdown + OPTS.tab == 0:
-    OPTS.markdown = True
-
-ALIGN: Final[str] = OPTS.align.lower()
-if not re.match(r'^[clrd]+$', ALIGN):
-    raise Exception('invalid --align argument "{}"'.format(OPTS.align))
-
-# ----------------------------------------------------------------------------
+from typing import Final
+from collections.abc import Iterable
+import click
 
 # For default alignment 'd', any field that looks like a number
 # will be right justified
@@ -156,33 +112,14 @@ NUMBER_RE: Final = re.compile(r'^[-+]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?%?$')
 def has_tabs(lines: Iterable[str]) -> bool:
     """True if any line contains a tab"""
 
-    for line in lines:
-        if '\t' in line:
-            return True
-    return False
+    return any('\t' in line for line in lines)
 
 def all_spaces(lines: Iterable[str], col: int) -> bool:
     """True if every character in column COL is a space"""
 
-    for line in lines:
-        if line[col] != ' ':
-            return False
-    return True
+    return any(line[col] != ' ' for line in lines)
 
-def get_align(col: int, text: str) -> str:
-    """Return the alignment character for TEXT in column COL"""
-
-    if col < len(ALIGN):
-        a = ALIGN[col]
-    else:
-        a = 'd'
-    if a == 'd':
-        a = 'l'
-        if NUMBER_RE.match(text):
-            a = 'r'
-    return a
-
-def trim(values: Iterable[str]) -> List[str]:
+def trim(values: Iterable[str]) -> list[str]:
     """
     Remove leading and trailing whitespace for each string in VALUES.
     Compress consecutive whitespace to a single space
@@ -190,197 +127,273 @@ def trim(values: Iterable[str]) -> List[str]:
     return [re.sub(r'\s+', ' ', value).strip()
             for value in values]
 
-# ----------------------------------------------------------------------------
+class TableToMarkup:
 
-def output_wiki(num_cols: int, rows: Iterable[Iterable[str]]) -> None:
-    # Calculate the width of each column: the widest of all cells in that
-    # column.  Alignment can affect the width of each column
-    width = [0] * num_cols
-    header_row = OPTS.header_row
-    for row in rows:
-        i = 0
-        for cell in row:
-            wid = len(cell)
-            if header_row:
-                wid += 2       # length('==')
+    def __init__(self,
+                 header_row: bool,
+                 header: str,
+                 no_header_line: bool,
+                 align: str,
+                 wiki: bool,
+                 markdown: bool,
+                 tab: bool) -> None:
 
-            a = get_align(i, cell)
-            if a == 'c':
-                wid += 4       # two spaces on each end
-            elif a == 'r':
-                wid += 1       # a space on the left
+        self.header_row = header_row
+        self.header = header
+        self.no_header_line = no_header_line
+        self.align = align.lower()
+        self.wiki = wiki
+        self.markdown = markdown
+        self.tab = tab
 
-            if width[i] < wid:
-                width[i] = wid
-            i += 1
-        header_row = False
+        if not re.match(r'^[clrd]+$', self.align):
+            raise RuntimeError(f'Invalid align "{self.align}"')
 
-    header_row = OPTS.header_row
-    for row in rows:
-        i = 0
-        line = ''
-        for cell in row:
-            wid = width[i]
-            line += '||'
-            if header_row:
-                line += '='
-                wid -= 2
+        if wiki + markdown + tab == 0:
+            self.markdown = True
 
-            sp = wid - len(cell)
-            a = get_align(i, cell)
-            if a == 'c':
-                x = sp // 2
-                y = sp - x
-                line += ' ' * x + cell + ' ' * y
-            elif a == 'r':
-                line += ' ' * sp + cell
-            else:
-                assert a == 'l'
-                line += cell + ' ' * sp
+    def get_align(self, col: int, text: str) -> str:
+        """Return the alignment character for TEXT in column COL"""
 
-            if header_row:
-                line += '='
+        a = self.align[col] if col < len(self.align) else self.align[-1]
+        if a == 'd':
+            a = 'l'
+            if NUMBER_RE.match(text):
+                a = 'r'
+        return a
 
-            i += 1
-        line += '||'
-        print(line)
-        header_row = False
+    def process_lines(self, lines: Iterable[str]) -> None:
+        if not lines:
+            return
 
-def output_markdown(num_cols: int, rows: Iterable[Iterable[str]]) -> None:
-    if not OPTS.header_row:
-        # Fake header
-        rows = list(rows)
-        rows.insert(0, ['C%d' % (i + 1) for i in range(num_cols)])
+        if self.header is not None:
+            self.header_row = True
+            lines = list(lines)
+            lines.insert(0, self.header)
 
-    # Calculate the width of each column: the widest of all cells
-    # in that column
-    width = [0] * num_cols
-    for row in rows:
-        i = 0
-        for cell in row:
-            wid = len(cell)
-            if width[i] < wid:
-                width[i] = wid
-            i += 1
+        # Remove trailing newlines, spaces, tabs and carriage returns
+        lines = [line.rstrip() for line in lines]
 
-    header_row = True
-    for row in rows:
-        i = 0
-        line = ''
-        for cell in row:
-            line += '| '
-            wid = width[i]
+        if has_tabs(lines):
+            rows = [trim(line.split('\t'))
+                    for line in lines]
+        else:
+            longest = max(len(line) for line in lines)
 
-            sp = wid - len(cell)
-            a = get_align(i, cell)
-            if a == 'c':
-                x = sp // 2
-                y = sp - x
-                line += ' ' * x + cell + ' ' * y
-            elif a == 'r':
-                line += ' ' * sp + cell
-            else:
-                assert a == 'l'
-                line += cell + ' ' * sp
-            line += ' '
-            i += 1
-        line += '|'
-        print(line)
+            # Make all lines the same length
+            lines = [line + ' ' * (longest - len(line))
+                     for line in lines]
 
-        if header_row and not OPTS.no_header_line:
-            header_row = False
-            line = ''
-            for i in range(num_cols):
-                wid = width[i]
-                a = get_align(i, '')
+            # Remove leading spaces if in all rows
+            while longest > 0 and all_spaces(lines, 0):
+                lines = [line[1:] for line in lines]
+                longest -= 1
+
+            # Find the columns
+            cols = []
+            i = 0
+            while i < longest:
+                if all_spaces(lines, i):
+                    cols.append(i)
+                    # Skip adjacent character columns that are all blank
+                    while i + 1 < longest and all_spaces(lines, i + 1):
+                        i += 1
+                i += 1
+            cols.append(longest)
+
+            # Extract all the cells
+            rows = []
+            for line in lines:
+                cells = []
+                prev_col = 0
+                for col in cols:
+                    cells.append(line[prev_col:col])
+                    prev_col = col + 1
+                rows.append(trim(cells))
+
+        # Calculate how many columns we have: the maximum number of columns
+        # over all rows
+        num_cols = max(len(row) for row in rows)
+
+        if self.wiki:
+            self.output_wiki(num_cols, rows)
+
+        if self.markdown:
+            self.output_markdown(num_cols, rows)
+
+        if self.tab:
+            self.output_tab(num_cols, rows)
+
+    def output_wiki(self, num_cols: int, rows: Iterable[Iterable[str]]) -> None:
+        # Calculate the width of each column: the widest of all cells in that
+        # column.  Alignment can affect the width of each column
+        width = [0] * num_cols
+        header_row = self.header_row
+        for row in rows:
+            i = 0
+            for cell in row:
+                wid = len(cell)
+                if header_row:
+                    wid += 2       # length('==')
+
+                a = self.get_align(i, cell)
                 if a == 'c':
-                    line += '|:' + '-' * wid + ':'
+                    wid += 4       # two spaces on each end
                 elif a == 'r':
-                    line += '| ' + '-' * wid + ':'
+                    wid += 1       # a space on the left
+
+                if width[i] < wid:
+                    width[i] = wid
+                i += 1
+            header_row = False
+
+        header_row = self.header_row
+        for row in rows:
+            i = 0
+            line = ''
+            for cell in row:
+                wid = width[i]
+                line += '||'
+                if header_row:
+                    line += '='
+                    wid -= 2
+
+                sp = wid - len(cell)
+                a = self.get_align(i, cell)
+                if a == 'c':
+                    x = sp // 2
+                    y = sp - x
+                    line += ' ' * x + cell + ' ' * y
+                elif a == 'r':
+                    line += ' ' * sp + cell
                 else:
                     assert a == 'l'
-                    line += '| ' + '-' * wid + ' '
+                    line += cell + ' ' * sp
+
+                if header_row:
+                    line += '='
+
+                i += 1
+            line += '||'
+            print(line)
+            header_row = False
+
+    def output_markdown(self, num_cols: int, rows: Iterable[Iterable[str]]) -> None:
+        if not self.header_row:
+            # Fake header
+            rows = list(rows)
+            rows.insert(0, [f'C{i + 1}' for i in range(num_cols)])
+
+        # Calculate the width of each column: the widest of all cells
+        # in that column
+        width = [0] * num_cols
+        for row in rows:
+            i = 0
+            for cell in row:
+                wid = len(cell)
+                if width[i] < wid:
+                    width[i] = wid
+                i += 1
+
+        header_row = True
+        for row in rows:
+            i = 0
+            line = ''
+            for cell in row:
+                line += '| '
+                wid = width[i]
+
+                sp = wid - len(cell)
+                a = self.get_align(i, cell)
+                if a == 'c':
+                    x = sp // 2
+                    y = sp - x
+                    line += ' ' * x + cell + ' ' * y
+                elif a == 'r':
+                    line += ' ' * sp + cell
+                else:
+                    assert a == 'l'
+                    line += cell + ' ' * sp
+                line += ' '
+                i += 1
             line += '|'
             print(line)
 
-def output_tab(_num_cols: int, rows: Iterable[Iterable[str]]) -> None:
-    for row in rows:
-        print('\t'.join(row))
+            if header_row and not self.no_header_line:
+                header_row = False
+                line = ''
+                for i in range(num_cols):
+                    wid = width[i]
+                    a = self.get_align(i, '')
+                    if a == 'c':
+                        line += '|:' + '-' * wid + ':'
+                    elif a == 'r':
+                        line += '| ' + '-' * wid + ':'
+                    else:
+                        assert a == 'l'
+                        line += '| ' + '-' * wid + ' '
+                line += '|'
+                print(line)
 
-# ----------------------------------------------------------------------------
+    @staticmethod
+    def output_tab(_num_cols: int, rows: Iterable[Iterable[str]]) -> None:
+        for row in rows:
+            print('\t'.join(row))
 
-def process_lines(lines: Iterable[str]) -> None:
-    if not lines:
-        return
+@click.command()
+@click.option('--header-row', '-H', is_flag=True,
+              help='First input row is the header')
+@click.option('--header',
+              help='Use this text as the header')
+@click.option('--no-header-line', '-N', is_flag=True,
+              help="""
+Suppress the line of dashes after the output header line (markdown)
+""")
+@click.option('--align', '-a', default='d', show_default=True,
+              help="""
+A string of 'clrd' characters, one per table column
+center, left, right and default align.
+For default align, numbers are right aligned, all else left.
 
-    if OPTS.header is not None:
-        OPTS.header_row = True
-        lines = list(lines)
-        lines.insert(0, OPTS.header)
+If there are more table columns than align chars,
+then the last char is used repeatedly
+""")
+@click.option('--wiki', '-w', is_flag=True,
+              help='Generate a Wiki document')
+@click.option('--markdown', '-m', is_flag=True,
+              help='Generate a Markdown document')
+@click.option('--tab', '-t', is_flag=True,
+              help='Generate a tab-separated columns document')
+@click.argument('files', nargs=-1)
+def main(header_row: bool = False,
+         header: str = '',
+         no_header_line: bool = False,
+         align: str = 'd',
+         wiki: bool = False,
+         markdown: bool = False,
+         tab: bool = False,
+         files: tuple[str] | None = None) -> None:
+    """
+    Take a table formatted as plain text and convert it to Wiki or Markdown format
+    """
 
-    # Remove trailing newlines, spaces, tabs and carriage returns
-    lines = [line.rstrip() for line in lines]
+    table_to_markup = TableToMarkup(header_row,
+                                    header,
+                                    no_header_line,
+                                    align,
+                                    wiki,
+                                    markdown,
+                                    tab)
 
-    if has_tabs(lines):
-        rows = [trim(line.split('\t'))
-                for line in lines]
-    else:
-        longest = max(map(len, lines))
-
-        # Make all lines the same length
-        lines = [line + ' ' * (longest - len(line))
-                 for line in lines]
-
-        # Remove leading spaces if in all rows
-        while longest > 0 and all_spaces(lines, 0):
-            lines = [line[1:] for line in lines]
-            longest -= 1
-
-        # Find the columns
-        cols = []
-        i = 0
-        while i < longest:
-            if all_spaces(lines, i):
-                cols.append(i)
-                # Skip adjacent character columns that are all blank
-                while i + 1 < longest and all_spaces(lines, i + 1):
-                    i += 1
-            i += 1
-        cols.append(longest)
-
-        # Extract all the cells
-        rows = []
-        for line in lines:
-            cells = []
-            prev_col = 0
-            for col in cols:
-                cells.append(line[prev_col:col])
-                prev_col = col + 1
-            rows.append(trim(cells))
-
-    # Calculate how many columns we have: the maximum
-    # number of columns over all rows
-    num_cols = max([len(row) for row in rows])
-
-    if OPTS.wiki:
-        output_wiki(num_cols, rows)
-
-    if OPTS.markdown:
-        output_markdown(num_cols, rows)
-
-    if OPTS.tab:
-        output_tab(num_cols, rows)
-
-def main() -> None:
-    if OPTS.files:
+    if files:
         want_separator = False
-        for filename in OPTS.files:
-            with open(filename) as fh:
+        for filename in files:
+            with open(filename, encoding='utf-8') as fh:
                 if want_separator:
                     print('\f')
-                process_lines(fh.readlines())
+                table_to_markup.process_lines(fh.readlines())
                 want_separator = True
     else:
-        process_lines(sys.stdin.readlines())
+        table_to_markup.process_lines(sys.stdin.readlines())
 
 main()
