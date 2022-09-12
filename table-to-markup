@@ -365,14 +365,14 @@ then the last char is used repeatedly
 @click.option('--tab', '-t', is_flag=True,
               help='Generate a tab-separated columns document')
 @click.argument('files', nargs=-1)
-def main(header_row: bool = False,
-         header: str = '',
-         no_header_line: bool = False,
-         align: str = 'd',
-         wiki: bool = False,
-         markdown: bool = False,
-         tab: bool = False,
-         files: tuple[str] | None = None) -> None:
+def main(header_row: bool,
+         header: str,
+         no_header_line: bool,
+         align: str,
+         wiki: bool,
+         markdown: bool,
+         tab: bool,
+         files: Iterable[str]) -> None:
     """
     Take a table formatted as plain text and convert it to Wiki or Markdown format
     """
@@ -396,4 +396,4 @@ def main(header_row: bool = False,
     else:
         table_to_markup.process_lines(sys.stdin.readlines())
 
-main()
+main()                          # pylint: disable=no-value-for-parameter
