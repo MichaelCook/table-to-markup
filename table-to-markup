@@ -396,4 +396,5 @@ def main(header_row: bool,
     else:
         table_to_markup.process_lines(sys.stdin.readlines())
 
-main()                          # pylint: disable=no-value-for-parameter
+if __name__ == '__main__':
+    main()                      # pylint: disable=no-value-for-parameter
