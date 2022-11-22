@@ -117,7 +117,7 @@ def has_tabs(lines: Iterable[str]) -> bool:
 def all_spaces(lines: Iterable[str], col: int) -> bool:
     """True if every character in column COL is a space"""
 
-    return any(line[col] != ' ' for line in lines)
+    return all(line[col] == ' ' for line in lines)
 
 def trim(values: Iterable[str]) -> list[str]:
     """
