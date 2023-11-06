@@ -372,7 +372,7 @@ def main(header_row: bool,
          wiki: bool,
          markdown: bool,
          tab: bool,
-         files: Iterable[str]) -> None:
+         files: tuple[str, ...]) -> None:
     """
     Take a table formatted as plain text and convert it to Wiki or Markdown format
     """
