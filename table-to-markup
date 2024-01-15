@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # Take a table formatted as plain text and convert it to Wiki or Markdown
 # format.
